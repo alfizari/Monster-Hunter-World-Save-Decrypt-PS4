@@ -1,2 +1,20 @@
 # Monster-Hunter-World-Save-Decrypt-PS4
-decrypt/encrypt the save file for Monster Hunter World
+
+Removes the 2nd encryption layer from the save file
+
+Useg: 
+python mhw.py save_file decrypt/encrypt
+
+or Download the compiled build for simple GUI 
+
+Credit:
+
+A rework of the PC tool: [LEGENDFF](https://github.com/LEGENDFF/mhw-Savecrypt).
+
+Done by the efforts of:
+
+[Alfazari911](https://github.com/alfizari), [HZH](https://github.com/hzhreal), Anna, Radu
+
+
+
+
