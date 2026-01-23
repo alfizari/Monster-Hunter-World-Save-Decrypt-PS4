@@ -13,7 +13,7 @@ A rework of the PC tool: [LEGENDFF](https://github.com/LEGENDFF/mhw-Savecrypt).
 
 Done by the efforts of:
 
-[Alfazari911](https://github.com/alfizari), [HZH](https://github.com/hzhreal), Anna, Radu
+[Alfazari911](https://github.com/alfizari), [HZH](https://github.com/hzhreal), Anna, [Radu13](https://github.com/radu13)
 
 
 
