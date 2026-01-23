@@ -337,111 +337,94 @@ def crc32_block_aligned(data, start, end, init_crc):
         
         return crc & 0xFFFFFFFF
 
-def generate_checksum(data, param_1_offset=0xC0490023, param_5=0):
+def generate_checksum(data, seed=0xC0490023, saveSlot=0):
 
-        param_4 = len(data)
+        length = len(data)
         
-        # Initialize auStack_68 array
-        auStack_68 = [
-            0x67308D52,
-            0x26AE9DAB,
-            0x701D5D68,
-            param_1_offset
-        ]
+        # Initialize constants array
+        constants = [ 0x67308D52, 0x26AE9DAB, 0x701D5D68, seed ]
         
-        # Initialize auStack_58 array using param_5
-        auStack_58 = [0] * 8
-        auStack_58[0] = 0x394E4E79 ^ auStack_68[param_5 & 3]
-        auStack_58[4] = auStack_68[param_5 & 3] ^ 0x137E601C
-        auStack_58[1] = 0x681BA6CF ^ auStack_68[(param_5 + 1) & 3]
-        auStack_58[5] = auStack_68[(param_5 + 1) & 3] ^ 0x4BF0CF23
-        auStack_58[7] = auStack_68[(param_5 - 1) & 3] ^ 0x5D9E0742
-        auStack_58[3] = auStack_68[(param_5 - 1) & 3] ^ 0x4BF0CF23
-        auStack_58[2] = 0x671A5459 ^ auStack_68[(param_5 + 2) & 3]
-        auStack_58[6] = auStack_68[(param_5 + 2) & 3] ^ 0x7C8B3AF0
+        # Initialize slotConstants array using saveSlot
+        slotConstants = [0] * 8
+        slotConstants[0] = 0x394E4E79 ^ constants[saveSlot & 3]
+        slotConstants[1] = 0x681BA6CF ^ constants[(saveSlot + 1) & 3]
+        slotConstants[2] = 0x671A5459 ^ constants[(saveSlot + 2) & 3]
+        slotConstants[3] = constants[(saveSlot - 1) & 3] ^ 0x4BF0CF23
+        slotConstants[4] = constants[saveSlot & 3] ^ 0x137E601C
+        slotConstants[5] = constants[(saveSlot + 1) & 3] ^ 0x4BF0CF23
+        slotConstants[6] = constants[(saveSlot + 2) & 3] ^ 0x7C8B3AF0
+        slotConstants[7] = constants[(saveSlot - 1) & 3] ^ 0x5D9E0742
         
         # Calculate positions using float arrays
-        uVar8 = param_4 >> 3
-        fVar15 = float(uVar8)
+        lengthInt = length >> 3
+        lengthFloat = float(lengthInt)
         
-        auStack_84 = [0] * 7
+        crcLengths = [0] * 7
         
         for i in range(7):
             idx = i + 1
             if idx < 8:
-                s_val = auStack_58[idx]
+                s_val = slotConstants[idx]
                 s_box_val = blowfish_sbox[s_val & 0xFFF]
                 combined = (s_val + s_box_val) & 0xFFF
                 float_val = floats_dump[combined]
-                auStack_84[i] = int((float_val - 0.5) * fVar15) + uVar8 * (idx + 1)
+                crcLengths[i] = int((float_val - 0.5) * lengthFloat) + lengthInt * (idx + 1)
         
         # Set last position
-        auStack_84[6] = param_4
-        
+        crcLengths[6] = length
+
         # Compute CRC values for each segment
-        auStack_a8 = [0] * 8
+        partialCrcs = [0] * 8
         
         # First segment
-        uStack_88 = int((floats_dump[(blowfish_sbox[auStack_58[0] & 0xFFF] + 
-                                             auStack_58[0]) & 0xFFF] - 0.5) * fVar15) + uVar8
-        
-        auStack_a8[0] = crc32_block_aligned(data, 0, uStack_88, auStack_58[0])
+        pos = int((floats_dump[(blowfish_sbox[slotConstants[0] & 0xFFF] + slotConstants[0]) & 0xFFF] - 0.5) * lengthFloat) + lengthInt
+        partialCrcs[0] = crc32_block_aligned(data, 0, pos, slotConstants[0])
         
         # Remaining segments
-        prev_pos = uStack_88
+        prev_pos = pos
         for i in range(1, 8):
-            curr_pos = auStack_84[i - 1] if i < 7 else param_4
-            init_crc = auStack_a8[i - 1] ^ auStack_58[i]
-            auStack_a8[i] = crc32_block_aligned(data, prev_pos, curr_pos, init_crc)
-            prev_pos = curr_pos
+            pos = crcLengths[i - 1] if i < 7 else length
+            init_crc = partialCrcs[i - 1] ^ slotConstants[i]
+            partialCrcs[i] = crc32_block_aligned(data, prev_pos, pos, init_crc)
+            prev_pos = pos
         
         # Combine results
-        auStack_c8 = [0] * 4
-        for i in range(4):
-            auStack_c8[i] = (auStack_a8[i] ^ auStack_58[i] ^ 
-                            auStack_68[3] ^ auStack_a8[7])
-        
-        uStack_b8 = auStack_58[4] ^ auStack_a8[7] ^ auStack_a8[4] ^ auStack_68[3]
-        uStack_b4 = auStack_58[5] ^ auStack_a8[7] ^ auStack_a8[5] ^ auStack_68[3]
-        uStack_b0 = auStack_a8[6] ^ auStack_68[3] ^ auStack_58[6] ^ auStack_a8[7]
-        uStack_ac = auStack_a8[7] ^ auStack_68[3] ^ auStack_58[7]
-        
+        hashLookup = [0] * 8
+        for i in range(7):
+            hashLookup[i] = partialCrcs[i] ^ slotConstants[i] ^ constants[3] ^ partialCrcs[7]
+        hashLookup[7] = partialCrcs[7] ^ slotConstants[7] ^ constants[3]
+
         # Compute final CRC over all intermediate values
-        uVar8 = (auStack_68[3] ^ auStack_68[param_5]) & 0xFFFFFFFF
+        crc = (constants[3] ^ constants[saveSlot]) & 0xFFFFFFFF
         
-        # Process auStack_58 values
-        for val in auStack_58:
+        # Process slotConstants values
+        for val in slotConstants:
             for byte_idx in range(4):
                 byte_val = (val >> (byte_idx * 8)) & 0xFF
-                uVar8 = ((uVar8 >> 8) ^ crc_table[byte_val ^ (uVar8 & 0xFF)]) & 0xFFFFFFFF
+                crc = ((crc >> 8) ^ crc_table[byte_val ^ (crc & 0xFF)]) & 0xFFFFFFFF
         
-        # Process auStack_a8 values
-        for val in auStack_a8:
-            val_swapped = swap_bytes(val)
+        # Process partialCrcs values
+        for val in partialCrcs:
             for byte_idx in range(4):
-                byte_val = (val_swapped >> ((3 - byte_idx) * 8)) & 0xFF
-                uVar8 = ((uVar8 >> 8) ^ crc_table[byte_val ^ (uVar8 & 0xFF)]) & 0xFFFFFFFF
-        
-        uVar10 = uVar8
+                byte_val = (val >> (byte_idx * 8)) & 0xFF
+                crc = ((crc >> 8) ^ crc_table[byte_val ^ (crc & 0xFF)]) & 0xFFFFFFFF
         
         # Generate final 0x200 bytes
         result = bytearray(0x200)
-        uVar9 = uVar10
-        
-        combined_stack = auStack_c8 + [uStack_b8, uStack_b4, uStack_b0, uStack_ac]
+        crcSalt = crc
         
         for i in range(0x200 // 4):
-            s_box_val = blowfish_sbox[uVar9 & 0xFFF]
-            stack_idx = (s_box_val + param_5) & 7
+            s_box_val = blowfish_sbox[crcSalt & 0xFFF]
+            stack_idx = (s_box_val + saveSlot) & 7
             
-            output_val = (s_box_val ^ combined_stack[stack_idx] ^ param_1_offset) & 0xFFFFFFFF
+            output_val = (s_box_val ^ hashLookup[stack_idx] ^ seed) & 0xFFFFFFFF
             
             struct.pack_into('<I', result, i * 4, output_val)
             
-            # Update uVar9 for next iteration
-            byte_sum = ((uVar10 & 0xFF) + ((uVar10 >> 8) & 0xFF) + 
-                       ((uVar10 >> 16) & 0xFF) + (uVar8 >> 24) + 1)
-            uVar9 = (uVar9 + byte_sum) & 0xFFFFFFFF
+            # Update crcSalt for next iteration
+            byte_sum = ((crc & 0xFF) + ((crc >> 8) & 0xFF) + 
+                       ((crc >> 16) & 0xFF) + (crc >> 24) + 1)
+            crcSalt = (crcSalt + byte_sum) & 0xFFFFFFFF
         
         return bytes(result)
 
@@ -462,9 +445,8 @@ def generate_salt(key_salt):
     
     # Generate remaining 508 bytes
     for i in range(4, 0x200, 4):
-        uVar1 = (0xC0490023 + iVar2) & 0xFFFFFFFF
+        table_offset = (0xC0490023 + iVar2) & 0xFFF
         iVar2 = (iVar2 + iVar4) & 0xFFFFFFFF
-        table_offset = uVar1 & 0xFFF
         salt[i:i+4] = struct.pack('<I',
             (blowfish_sbox[table_offset] ^ 0x4BF0CF23 ^ key_salt) & 0xFFFFFFFF)
     
@@ -499,7 +481,7 @@ def generate_keys(key_salt, salt):
         key[12:16] = struct.pack('<I', (blowfish_sbox[offset3] ^ uVar9 ^ 0x67308D52) & 0xFFFFFFFF)
 
         keys.append(bytes(key))
-    
+
     return keys
 
 def generate_key_length(key_salt, length):
@@ -597,7 +579,7 @@ def decrypt_region(save, offset, length, param_5):
             salt_offset += 1  # Increment by 1 DWORD
             save_offset += 16
     
-    checksum = generate_checksum(save[offset:offset + length], param_1_offset=0xC0490023, param_5=param_5)
+    checksum = generate_checksum(save[offset:offset + length], seed=0xC0490023, saveSlot=param_5)
     if not check_checksum(bytes(save), checksum, offset, length):
         print("WARNING: save has invalid checksum")
     
@@ -608,7 +590,7 @@ def encrypt_region(save, offset, length, param_5):
     save = bytearray(save)
     
     # Generate checksum from UNENCRYPTED data
-    checksum = generate_checksum(save[offset:offset + length], param_1_offset=0xC0490023, param_5=param_5)
+    checksum = generate_checksum(save[offset:offset + length], seed=0xC0490023, saveSlot=param_5)
     save = bytearray(save)
     
     # Write checksum to the end of the region
@@ -689,21 +671,16 @@ def check_checksum(save, checksum, region_offset, region_length):
     return get_checksum(save, region_offset, region_length) == checksum
 
 def decrypt_save(save):
-    
     save = decrypt_region(save, 0x488, 0x2098C0, 0)
     save = decrypt_region(save, 0x209F48, 0x2098C0, 1)
     save = decrypt_region(save, 0x413A08, 0x2098C0, 2)
-
     
     return save
 
 def encrypt_save(save):
-    save = bytearray(save)
-
     save = encrypt_region(save, 0x488, 0x2098C0, 0)
     save = encrypt_region(save, 0x209F48, 0x2098C0, 1)
     save = encrypt_region(save, 0x413A08, 0x2098C0, 2)
-    
     
     return save
 
@@ -721,26 +698,25 @@ def main():
 
     save = bytearray(input_file.read_bytes())
 
-    add_back = save[0x600488:0x6010C0]
-
+    START = 0x600488
+    DEST = 0x61D4C8
+    SIZE = 3128
     if state == "decrypt":
-
-        save = save[:0x600488] + save[0x6010C0:]
+        buffer = save[START:START+SIZE]
+        save = save[:START] + save[START+SIZE:]
+        save = save[:DEST] + buffer + save[DEST:]
         save = decrypt_save(save)
-        save = save[:0x600488] + add_back + save[0x600488:]
-
     elif state == "encrypt":
-
-        save = save[:0x600488] + save[0x6010C0:]
         save = encrypt_save(save)
-        save = save[:0x600488] + add_back + save[0x600488:]
+        buffer = save[DEST:DEST+SIZE]
+        save = save[:DEST] + save[DEST+SIZE:]
+        save = save[:START] + buffer + save[START:]
     else:
         print(f"Error: Unknown state '{state}', must be 'encrypt' or 'decrypt'")
         sys.exit(1)
 
 
     if state == "decrypt":
-
         output_file = input_file.with_name(input_file.stem + input_file.suffix + ".dec")
     else:
         output_file = input_file.with_name(input_file.stem + input_file.suffix + ".enc")
